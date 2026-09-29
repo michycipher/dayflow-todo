@@ -1,5 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 
+try {
+  process.loadEnvFile();
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+
 const url = process.env.DATABASE_URL;
 if (!url) {
   console.error("Set DATABASE_URL before applying the database schema.");

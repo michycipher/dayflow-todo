@@ -15,6 +15,8 @@
     "test": "node --test tests/tasks.test.mjs"
   },
   "dependencies": {
+    "@neon/config": "^1.8.3",
+    "@neon/env": "^1.4.8",
     "@neondatabase/serverless": "^1.0.2",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
