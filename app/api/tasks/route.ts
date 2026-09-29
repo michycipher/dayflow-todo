@@ -5,6 +5,10 @@ import { taskInput } from "@/lib/tasks";
 export const dynamic = "force-dynamic";
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
+const requestOriginAllowed = (request: Request) => {
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
+};
 async function handle(
   request: Request,
   action: (userId: string) => Promise<Response>,
@@ -14,9 +18,6 @@ async function handle(
     if (!user)
       return json({ error: "Please sign in to access your tasks." }, 401);
     if (request.method !== "GET") {
-      const origin = request.headers.get("origin");
-      if (origin && origin !== new URL(request.url).origin)
-        return json({ error: "Request origin is not allowed." }, 403);
       if (!request.headers.get("content-type")?.includes("application/json"))
         return json({ error: "Expected JSON." }, 415);
     }
@@ -72,9 +73,12 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   return handle(request, async (userId) => {
+    const parsedBody = await body(request);
+    if (!requestOriginAllowed(request))
+      return json({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({ tasks: z.array(taskInput).min(1).max(100) })
-      .parse(await body(request));
+      .parse(parsedBody);
     const now = new Date().toISOString();
     const tasks = input.tasks.map((data) => ({
       ...data,
@@ -103,13 +107,16 @@ export async function POST(request: Request) {
 }
 export async function PUT(request: Request) {
   return handle(request, async (userId) => {
+    const parsedBody = await body(request);
+    if (!requestOriginAllowed(request))
+      return json({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({
         id: z.string().uuid(),
         version: z.number().int().positive(),
         task: taskInput,
       })
-      .parse(await body(request));
+      .parse(parsedBody);
     const now = new Date().toISOString();
     const result = await database()
       .prepare(
@@ -138,9 +145,12 @@ export async function PUT(request: Request) {
 }
 export async function DELETE(request: Request) {
   return handle(request, async (userId) => {
+    const parsedBody = await body(request);
+    if (!requestOriginAllowed(request))
+      return json({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({ id: z.string().uuid(), version: z.number().int().positive() })
-      .parse(await body(request));
+      .parse(parsedBody);
     const result = await database()
       .prepare("DELETE FROM tasks WHERE id = ? AND user_id = ? AND version = ?")
       .bind(input.id, userId, input.version)
