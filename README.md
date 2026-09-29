@@ -1,50 +1,44 @@
 # Dayflow
 
-A calm, responsive todo workspace built with AI assistance for HNG. Source lives in this folder.
+Dayflow is a public todo workspace with projects, priorities, due dates, notes,
+tags, subtasks, list and board views, search, a focus timer, JSON backup and a
+checklist starter for the HNG assignment.
 
-## Features
-- Create, edit, complete, reopen and delete tasks, with a short undo window.
-- Projects, priorities, due dates, overdue indicators, notes, tags and subtasks.
-- My day, all tasks, upcoming and completed views; list and board layouts.
-- Search, priority filtering and sorting; keyboard shortcuts: N to add, / to search.
-- Focus timer with 25-minute, 50-minute and 5-minute modes. Uses a deadline so background-tab throttling does not accumulate timer drift. Timer state lasts for the current page session.
-- Light/dark appearance, responsive navigation, accessible dialogs and controls.
-- JSON export and validated import (imports make new copies, up to 100 tasks per file).
-- Cloudflare D1 persistence, authenticated user isolation, version checks to prevent silent concurrent overwrites.
-- Progressive WebMCP list/create tools when supported by the browser.
+## Privacy and task storage
 
-Built *with* AI; no in-app AI model or API key is required. Sign-in and production hosting are provided by OpenAI Sites. There is no shared public task list.
+Anyone can open the deployed app. On first use, the server sets a signed,
+HTTP-only browser session cookie and stores tasks in Neon Postgres under that
+session. Task data is private to that browser profile; it does not sync to
+another device and clearing site cookies creates a new empty workspace. There
+is no account recovery or shared task list.
 
-## Development on Windows
+## Run locally
 
-Requires Node.js 22.13+ and npm. Use `npm.cmd` if PowerShell blocks npm.ps1.
+Use Node.js 22.13+ and npm. Copy `.env.example` to `.env`, set `DATABASE_URL`
+to a Neon Postgres connection string, and set `APP_SESSION_SECRET` to at least
+32 random characters. Keep `.env` private; it is ignored by Git.
 
 ```powershell
 npm.cmd ci
-npm.cmd run db:generate # only after schema changes; do not regenerate applied migrations
-npm.cmd run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_faulty_forge.sql
+npm.cmd run db:migrate
 npm.cmd run dev
 ```
 
-Apply the existing migration once to each fresh local database. Open the local URL printed by the server, then choose **Sign in**. Loopback development simulates a local test account; production uses real platform sign-in. The local database and test tasks are ignored by Git and are not published.
+The database setup is safe to run again. Verify changes with:
 
 ```powershell
-node node_modules/typescript/bin/tsc --noEmit
-node --test tests/tasks.test.mjs
+npm.cmd run lint
+npm.cmd test
 npm.cmd run build
 ```
 
-`AGENTS.md` describes the project structure and working rules. `app/dayflow.tsx` composes the UI, `app/api/tasks/route.ts` validates requests and scopes every query by identity, and `db/schema.ts` defines the database. The server returns errors without discarding task-editor input.
+## Deploy to Vercel
 
-## Hosting
+Import the private GitHub repository into Vercel, then add `DATABASE_URL` and
+`APP_SESSION_SECRET` to the project environment for Production and Preview.
+The included `vercel.json` runs the idempotent database setup before every
+build. Vercel's generated `.vercel.app` URL is publicly accessible; tasks remain
+private to the browser session that created them.
 
-The manifest `.openai/hosting.json` identifies this Site and its logical D1 binding. Use the installed Sites publishing workflow to build, commit, push source, package, save a version and deploy. Production migrations are applied by that workflow. No production credentials belong in this repository. Publishing elsewhere requires adapting the dispatcher-provided authentication and provisioning D1.
-
-## Assignment checklist
-
-- App and `AGENTS.md`: included.
-- Live URL and private GitHub push: see the delivery message for verified status.
-- Team Telegram membership: must be completed in the user's own Telegram session.
-
-The app offers **Add my HNG assignment checklist** in a new empty workspace. It creates real tasks; completion is always controlled by the user.
+The build expects `DATABASE_URL` to reach the hosted Neon database. Never add
+real credentials to Git or `.env.example`.

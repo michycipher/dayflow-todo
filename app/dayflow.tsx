@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Check,
   Plus,
@@ -10,7 +11,6 @@ import {
   CheckCheck,
   Search,
   Flag,
-  ArrowUpDown,
   List,
   Columns3,
   ChevronRight,
@@ -26,11 +26,7 @@ import {
   Download,
   Upload,
   RefreshCw,
-  Circle,
-  CircleCheck,
-  LogOut,
   Sparkles,
-  Menu,
 } from "lucide-react";
 import {
   Dialog,
@@ -116,13 +112,9 @@ async function api(method = "GET", body?: unknown) {
     throw new Error(result.error || "Something went wrong. Please try again.");
   return result;
 }
-export default function Dayflow({
-  user,
-}: {
-  user: { name: string; email: string } | null;
-}) {
+export default function Dayflow() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(!!user);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [view, setView] = useState("My day");
   const [search, setSearch] = useState("");
@@ -148,7 +140,6 @@ export default function Dayflow({
   const searchInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
-    if (!user) return;
     setLoading(true);
     setError("");
     try {
@@ -158,14 +149,18 @@ export default function Dayflow({
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
   useEffect(() => {
+    const timer = window.setTimeout(() => {
     try {
       setDark(localStorage.getItem("dayflow-theme") === "dark");
     } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -192,10 +187,6 @@ export default function Dayflow({
     return () => clearInterval(id);
   }, [running]);
   const openNew = useCallback(() => {
-    if (!user) {
-      toast("Sign in to create and save your tasks.");
-      return;
-    }
     setEditing(null);
     setDraft({
       ...blankTask(),
@@ -206,7 +197,7 @@ export default function Dayflow({
     setSubtask("");
     setFormError("");
     setDialog(true);
-  }, [user, view]);
+  }, [view]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (
@@ -248,12 +239,12 @@ export default function Dayflow({
         };
       }
     ).modelContext;
-    if (!context?.registerTool || !user) return;
+    if (!context?.registerTool) return;
     const controller = new AbortController();
     const tools: Tool[] = [
       {
         name: "list_tasks",
-        description: "Read the signed-in user’s tasks.",
+        description: "Read tasks in this browser’s private workspace.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -269,7 +260,7 @@ export default function Dayflow({
       {
         name: "create_task",
         description:
-          "Create and save one task in the signed-in user’s workspace.",
+          "Create and save one task in this browser’s private workspace.",
         inputSchema: {
           type: "object",
           properties: {
@@ -298,7 +289,7 @@ export default function Dayflow({
       } catch {}
     }
     return () => controller.abort();
-  }, [user]);
+  }, []);
   const mutate = async (action: () => Promise<void>) => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -521,12 +512,12 @@ export default function Dayflow({
     >
       <Sidebar className="app-sidebar">
         <SidebarContent className="rail-content">
-          <a className="brand" href="/">
+          <Link className="brand" href="/">
             <span className="brand-mark">
               <Check size={21} />
             </span>
             dayflow<span className="brand-dot">.</span>
-          </a>
+          </Link>
           <div className="workspace-label">PERSONAL WORKSPACE</div>
           <nav aria-label="Workspace views">
             {navigation.map((item) => (
@@ -626,33 +617,17 @@ export default function Dayflow({
                 <Download size={15} />
                 Export tasks
               </button>
-              <button
-                disabled={!user || busy}
-                onClick={() => importInput.current?.click()}
-              >
+              <button disabled={busy} onClick={() => importInput.current?.click()}>
                 <Upload size={15} />
                 Import tasks
               </button>
             </div>
             <div className="profile">
-              <span className="avatar">
-                {user?.name[0]?.toUpperCase() || "D"}
-              </span>
+              <span className="avatar">D</span>
               <div>
-                <strong>{user?.name || "Your workspace"}</strong>
-                <small>
-                  {user ? "Personal account" : "Sign in to save tasks"}
-                </small>
+                <strong>Your workspace</strong>
+                <small>Private to this browser</small>
               </div>
-              {user && (
-                <a
-                  href="/signout-with-chatgpt?return_to=/"
-                  target="_top"
-                  aria-label="Sign out"
-                >
-                  <LogOut size={15} />
-                </a>
-              )}
             </div>
           </div>
         </SidebarContent>
@@ -674,19 +649,9 @@ export default function Dayflow({
               })}
             </span>
             <span className="header-divider" />
-            {user ? (
-              <span className="avatar" title={user.email}>
-                {user.name[0].toUpperCase()}
-              </span>
-            ) : (
-              <a
-                className="primary sign-in"
-                href="/signin-with-chatgpt?return_to=/"
-                target="_top"
-              >
-                Sign in <ArrowUpRight size={14} />
-              </a>
-            )}
+            <span className="avatar" title="Private to this browser">
+              D
+            </span>
           </div>
         </header>
         <main className="main">
@@ -838,7 +803,7 @@ export default function Dayflow({
                     className="icon-button"
                     aria-label="Refresh tasks"
                     onClick={() => void load()}
-                    disabled={loading || busy || !user}
+                    disabled={loading || busy}
                   >
                     <RefreshCw
                       size={14}
@@ -846,25 +811,7 @@ export default function Dayflow({
                     />
                   </button>
                 </div>
-                {!user ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">
-                      <Leaf size={30} />
-                    </div>
-                    <h3>A little space for your big plans.</h3>
-                    <p>
-                      Sign in to save your tasks and pick up where you left off.
-                    </p>
-                    <a
-                      className="primary"
-                      href="/signin-with-chatgpt?return_to=/"
-                      target="_top"
-                    >
-                      Create your workspace <ArrowUpRight size={15} />
-                    </a>
-                    <small>Private tasks. A calmer day.</small>
-                  </div>
-                ) : loading ? (
+                {loading ? (
                   <div className="loading-state" role="status">
                     <RefreshCw className="spinning" size={20} />
                     Gathering your tasks…
@@ -955,7 +902,7 @@ export default function Dayflow({
                     ))}
                   </div>
                 )}
-                {user && !loading && !error && (
+                {!loading && !error && (
                   <button className="add-row" onClick={openNew}>
                     <Plus size={17} />
                     Add a new task<span>Press N</span>
@@ -965,9 +912,7 @@ export default function Dayflow({
               <footer className="workspace-footer">
                 <span>
                   <span className="live-dot" />
-                  {user
-                    ? "Saved securely to your workspace"
-                    : "Your calm corner of the internet"}
+                  Saved securely to this browser’s workspace
                 </span>
                 <span>One thing at a time.</span>
               </footer>

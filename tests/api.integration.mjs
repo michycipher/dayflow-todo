@@ -1,33 +1,35 @@
 import assert from "node:assert/strict";
-const base = process.env.DAYFLOW_TEST_URL || "http://127.0.0.1:8787";
-const identities = {
-  a: {
-    "oai-authenticated-user-id": "dayflow-test-alice",
-    "oai-authenticated-user-email": "alice@example.test",
-  },
-  b: {
-    "oai-authenticated-user-id": "dayflow-test-bob",
-    "oai-authenticated-user-email": "bob@example.test",
-  },
-};
+
+const base = process.env.DAYFLOW_TEST_URL || "http://127.0.0.1:3000";
+const cookies = { a: "", b: "" };
+
 async function call(method, body, identity = "a", extra = {}) {
-  const res = await fetch(base + "/api/tasks", {
+  const headers = {
+    "Content-Type": "application/json",
+    ...extra,
+  };
+  if (cookies[identity]) headers.Cookie = cookies[identity];
+  const response = await fetch(base + "/api/tasks", {
     method,
-    headers: {
-      ...identities[identity],
-      "Content-Type": "application/json",
-      ...extra,
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(60000),
   });
-  const text = await res.text();
-  if (!res.headers.get("content-type")?.includes("application/json"))
-    throw new Error(method + " " + res.status + " " + text);
-  return { status: res.status, data: JSON.parse(text) };
+  const setCookie = response.headers.getSetCookie?.()[0];
+  if (setCookie) cookies[identity] = setCookie.split(";", 1)[0];
+  const text = await response.text();
+  if (!response.headers.get("content-type")?.includes("application/json"))
+    throw new Error(method + " " + response.status + " " + text);
+  return { status: response.status, data: JSON.parse(text) };
 }
-const anon = await call("GET", null, "none");
-assert.equal(anon.status, 401);
+
+const ownTasks = await call("GET");
+assert.equal(ownTasks.status, 200, JSON.stringify(ownTasks));
+assert.ok(cookies.a, "the first visit should receive a private session cookie");
+const otherTasks = await call("GET", undefined, "b");
+assert.equal(otherTasks.status, 200, JSON.stringify(otherTasks));
+assert.ok(cookies.b, "a second browser should receive its own cookie");
+
 const invalid = await call("POST", { tasks: [{ title: "  " }] });
 assert.equal(invalid.status, 400);
 const created = await call("POST", {
@@ -43,12 +45,13 @@ const created = await call("POST", {
   ],
 });
 assert.equal(created.status, 201, JSON.stringify(created));
-const task = created.data.tasks[0];
+let task = created.data.tasks[0];
+
 try {
   const list = await call("GET");
-  assert.ok(list.data.tasks.some((t) => t.id === task.id));
-  const foreign = await call("GET", null, "b");
-  assert.ok(!foreign.data.tasks.some((t) => t.id === task.id));
+  assert.ok(list.data.tasks.some((item) => item.id === task.id));
+  const foreign = await call("GET", undefined, "b");
+  assert.ok(!foreign.data.tasks.some((item) => item.id === task.id));
   const denied = await call(
     "PUT",
     {
@@ -65,15 +68,16 @@ try {
     task: { ...task, status: "done" },
   });
   assert.equal(changed.status, 200);
-  assert.equal(changed.data.task.version, 2);
-  assert.equal(changed.data.task.status, "done");
-  const stale = await call("PUT", { id: task.id, version: 1, task });
+  task = changed.data.task;
+  assert.equal(task.version, 2);
+  assert.equal(task.status, "done");
+  const stale = await call("PUT", {
+    id: task.id,
+    version: 1,
+    task: created.data.tasks[0],
+  });
   assert.equal(stale.status, 409);
 
-  const deleted = await call("DELETE", { id: task.id, version: 2 });
-  assert.equal(deleted.status, 200);
-  const after = await call("GET");
-  assert.ok(!after.data.tasks.some((t) => t.id === task.id));
   const crossOrigin = await call(
     "POST",
     { tasks: [{ title: "Rejected" }] },
@@ -83,10 +87,17 @@ try {
   assert.equal(crossOrigin.status, 403);
   const followup = await call("GET");
   assert.equal(followup.status, 200);
+  assert.ok(followup.data.tasks.some((item) => item.id === task.id));
+
+  const deleted = await call("DELETE", { id: task.id, version: task.version });
+  assert.equal(deleted.status, 200);
+  task = null;
+  const after = await call("GET");
+  assert.ok(!after.data.tasks.some((item) => item.id === created.data.tasks[0].id));
   console.log(
-    "PASS: authentication, validation, persisted CRUD, user isolation, conflict detection, cross-origin protection, deletion.",
+    "PASS: signed browser sessions, persisted CRUD, user isolation, validation, conflict detection, cross-origin protection and deletion.",
   );
-} catch (error) {
-  console.error(error);
-  process.exitCode = 1;
+} finally {
+  if (task)
+    await call("DELETE", { id: task.id, version: task.version }).catch(() => {});
 }

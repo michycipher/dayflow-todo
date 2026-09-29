@@ -1,39 +1,56 @@
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { database } from "@/db";
+import { tasks as taskTable } from "@/db/schema";
+import { getSession, jsonResponse } from "@/lib/session";
 import { taskInput } from "@/lib/tasks";
+
 export const dynamic = "force-dynamic";
-const json = (data: unknown, status = 200) =>
-  Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
+export const runtime = "nodejs";
+
 const requestOriginAllowed = (request: Request) => {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
 };
+
 async function handle(
   request: Request,
   action: (userId: string) => Promise<Response>,
 ) {
+  const session = getSession(request);
   try {
-    const user = await getChatGPTUser();
-    if (!user)
-      return json({ error: "Please sign in to access your tasks." }, 401);
-    if (request.method !== "GET") {
-      if (!request.headers.get("content-type")?.includes("application/json"))
-        return json({ error: "Expected JSON." }, 415);
-    }
-    return await action(user.userId);
+    if (
+      request.method !== "GET" &&
+      !request.headers.get("content-type")?.includes("application/json")
+    )
+      return jsonResponse(
+        { error: "Expected JSON." },
+        415,
+        session.setCookie,
+      );
+
+    const response = await action(session.userId);
+    if (session.setCookie)
+      response.headers.append("Set-Cookie", session.setCookie);
+    return response;
   } catch (error) {
     if (error instanceof z.ZodError)
-      return json({ error: error.issues[0]?.message || "Invalid task." }, 400);
+      return jsonResponse(
+        { error: error.issues[0]?.message || "Invalid task." },
+        400,
+        session.setCookie,
+      );
     if (error instanceof SyntaxError)
-      return json({ error: "Invalid JSON." }, 400);
+      return jsonResponse({ error: "Invalid JSON." }, 400, session.setCookie);
     console.error("Task API failed", error);
-    return json(
+    return jsonResponse(
       { error: "Your tasks could not be saved or loaded. Please try again." },
       503,
+      session.setCookie,
     );
   }
 }
+
 async function body(request: Request) {
   const text = await request.text();
   if (text.length > 200000)
@@ -46,122 +63,132 @@ async function body(request: Request) {
     ]);
   return JSON.parse(text);
 }
+
 export async function GET(request: Request) {
   return handle(request, async (userId) => {
-    const result = await database()
-      .prepare(
-        "SELECT id, data, version, created_at, updated_at FROM tasks WHERE user_id = ? ORDER BY created_at DESC",
-      )
-      .bind(userId)
-      .all<{
-        id: string;
-        data: string;
-        version: number;
-        created_at: string;
-        updated_at: string;
-      }>();
-    return json({
-      tasks: result.results.map((row) => ({
+    const rows = await database()
+      .select()
+      .from(taskTable)
+      .where(eq(taskTable.userId, userId))
+      .orderBy(desc(taskTable.createdAt));
+    return jsonResponse({
+      tasks: rows.map((row) => ({
         ...JSON.parse(row.data),
         id: row.id,
         version: row.version,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
       })),
     });
   });
 }
+
 export async function POST(request: Request) {
   return handle(request, async (userId) => {
-    const parsedBody = await body(request);
+    const requestBody = await body(request);
     if (!requestOriginAllowed(request))
-      return json({ error: "Request origin is not allowed." }, 403);
+      return jsonResponse({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({ tasks: z.array(taskInput).min(1).max(100) })
-      .parse(parsedBody);
+      .parse(requestBody);
     const now = new Date().toISOString();
-    const tasks = input.tasks.map((data) => ({
-      ...data,
+    const created = input.tasks.map((task) => ({
       id: crypto.randomUUID(),
+      userId,
+      data: JSON.stringify(task),
       version: 1,
       createdAt: now,
       updatedAt: now,
     }));
-    await database().batch(
-      tasks.map((task) =>
-        database()
-          .prepare(
-            "INSERT INTO tasks (id,user_id,data,version,created_at,updated_at) VALUES (?,?,?,1,?,?)",
-          )
-          .bind(
-            task.id,
-            userId,
-            JSON.stringify(taskInput.parse(task)),
-            now,
-            now,
-          ),
-      ),
+    const rows = await database().insert(taskTable).values(created).returning();
+    return jsonResponse(
+      {
+        tasks: rows.map((row) => ({
+          ...JSON.parse(row.data),
+          id: row.id,
+          version: row.version,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      },
+      201,
     );
-    return json({ tasks }, 201);
   });
 }
+
 export async function PUT(request: Request) {
   return handle(request, async (userId) => {
-    const parsedBody = await body(request);
+    const requestBody = await body(request);
     if (!requestOriginAllowed(request))
-      return json({ error: "Request origin is not allowed." }, 403);
+      return jsonResponse({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({
         id: z.string().uuid(),
         version: z.number().int().positive(),
         task: taskInput,
       })
-      .parse(parsedBody);
+      .parse(requestBody);
     const now = new Date().toISOString();
-    const result = await database()
-      .prepare(
-        "UPDATE tasks SET data = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ? AND version = ? RETURNING created_at",
+    const [updated] = await database()
+      .update(taskTable)
+      .set({
+        data: JSON.stringify(input.task),
+        version: sql`${taskTable.version} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(taskTable.id, input.id),
+          eq(taskTable.userId, userId),
+          eq(taskTable.version, input.version),
+        ),
       )
-      .bind(JSON.stringify(input.task), now, input.id, userId, input.version)
-      .first<{ created_at: string }>();
-    if (!result)
-      return json(
+      .returning({ createdAt: taskTable.createdAt });
+    if (!updated)
+      return jsonResponse(
         {
           error:
             "This task changed in another window. Refresh your tasks before trying again.",
         },
         409,
       );
-    return json({
+    return jsonResponse({
       task: {
         ...input.task,
         id: input.id,
         version: input.version + 1,
-        createdAt: result.created_at,
+        createdAt: updated.createdAt,
         updatedAt: now,
       },
     });
   });
 }
+
 export async function DELETE(request: Request) {
   return handle(request, async (userId) => {
-    const parsedBody = await body(request);
+    const requestBody = await body(request);
     if (!requestOriginAllowed(request))
-      return json({ error: "Request origin is not allowed." }, 403);
+      return jsonResponse({ error: "Request origin is not allowed." }, 403);
     const input = z
       .object({ id: z.string().uuid(), version: z.number().int().positive() })
-      .parse(parsedBody);
-    const result = await database()
-      .prepare("DELETE FROM tasks WHERE id = ? AND user_id = ? AND version = ?")
-      .bind(input.id, userId, input.version)
-      .run();
-    if (!result.meta.changes)
-      return json(
+      .parse(requestBody);
+    const deleted = await database()
+      .delete(taskTable)
+      .where(
+        and(
+          eq(taskTable.id, input.id),
+          eq(taskTable.userId, userId),
+          eq(taskTable.version, input.version),
+        ),
+      )
+      .returning({ id: taskTable.id });
+    if (!deleted.length)
+      return jsonResponse(
         {
           error: "This task changed in another window. Refresh and try again.",
         },
         409,
       );
-    return json({ ok: true });
+    return jsonResponse({ ok: true });
   });
 }

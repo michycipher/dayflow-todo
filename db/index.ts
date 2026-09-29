@@ -1,5 +1,12 @@
-import { env } from "cloudflare:workers";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
+import * as schema from "./schema";
+
+let cached: ReturnType<typeof drizzle<typeof schema>> | undefined;
+
 export function database() {
-  if (!env.DB) throw new Error("Task database is unavailable.");
-  return env.DB;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not configured.");
+  cached ??= drizzle(neon(url), { schema });
+  return cached;
 }

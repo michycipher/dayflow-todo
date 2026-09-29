@@ -1,26 +1,42 @@
 # Dayflow working agreement
 
-## Product and structure
-Build a calm, accessible task workspace. Do not label deterministic helpers as AI.
-- app/page.tsx: server entry and identity.
-- app/dayflow.tsx: interactive workspace.
-- app/globals.css: shared tokens and responsive layout.
-- app/api/tasks/route.ts: authenticated task API.
-- lib/tasks.ts: validated task model.
-- db/: D1 schema and access. drizzle/: generated immutable migrations.
+Dayflow is a public, account-free todo app. Each browser receives a signed,
+HTTP-only session cookie and sees only its own tasks. Do not claim that tasks
+sync across devices or label deterministic helpers as AI.
+
+## Structure
+
+- `app/page.tsx` and `app/dayflow.tsx`: workspace entry and interactive UI.
+- `app/api/tasks/route.ts`: validated, session-scoped task API.
+- `lib/session.ts`: signed anonymous browser sessions.
+- `lib/tasks.ts`: shared task validation, types and task helpers.
+- `db/`: Neon Postgres connection and Drizzle schema.
+- `scripts/migrate.mjs`: idempotent production database setup.
+- `tests/`: task and API coverage.
 
 ## Rules
+
 1. Inspect files and Git status before changes.
-2. Reuse the React/TypeScript stack and installed UI primitives.
-3. Scope every database operation to the authenticated user.
-4. Validate bodies; bind SQL parameters; never commit credentials.
-5. Persist tasks in D1, using browser storage only for preferences.
-6. Preserve user input on errors and show loading, empty and error states.
-7. Support keyboard navigation, visible focus and mobile layouts.
-8. Check TypeScript, production build and affected functionality before delivery.
-9. Report verified deployment and GitHub status honestly.
+2. Scope every database operation to the verified session ID.
+3. Validate request bodies, reject cross-origin writes, and never commit secrets.
+4. Preserve user input on errors and show loading, empty and error states.
+5. Support keyboard navigation, visible focus and mobile layouts.
+6. Check TypeScript, production build and affected functionality before delivery.
+7. Report deployment and GitHub status honestly; an available local build is not proof of a live deployment.
 
 ## Commands
-Use npm.cmd on Windows when PowerShell blocks npm.ps1.
-Commands: npm run dev, npm run build, npm run db:generate.
-Publish with the Sites workflow and the existing manifest identity.
+
+Use `npm.cmd` on Windows if PowerShell blocks `npm.ps1`.
+
+```powershell
+npm.cmd ci
+npm.cmd run dev
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
+npm.cmd run db:migrate
+```
+
+Configure `DATABASE_URL` and a 32+ character `APP_SESSION_SECRET` in `.env` for
+local use. Vercel needs both variables in its project settings. Its build
+command runs the idempotent schema setup before compiling the app.
