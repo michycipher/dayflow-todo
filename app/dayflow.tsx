@@ -13,6 +13,7 @@ import {
   Flag,
   List,
   Columns3,
+  StickyNote,
   ChevronRight,
   ArrowUpRight,
   Leaf,
@@ -69,6 +70,7 @@ const navigation = [
   { name: "All tasks", icon: Inbox },
   { name: "Upcoming", icon: CalendarDays },
   { name: "Completed", icon: CheckCheck },
+  { name: "Sticky wall", icon: StickyNote },
 ];
 const projectColors = ["#8b9e75", "#b6997b", "#929fc0", "#bf8f9f", "#77a7a1"];
 const statusNames = { todo: "To do", doing: "In progress", done: "Completed" };
@@ -126,6 +128,7 @@ export default function Dayflow() {
   const [priority, setPriority] = useState("all");
   const [sort, setSort] = useState("due");
   const [layout, setLayout] = useState("list");
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState("active");
   const [editing, setEditing] = useState<Task | null>(null);
   const [draft, setDraft] = useState<TaskInput>(blankTask());
@@ -415,7 +418,21 @@ export default function Dayflow() {
   const changeView = (next: string) => {
     setView(next);
     setSearch("");
-    setFilter("active");
+    setFilter(next === "Sticky wall" ? "all" : "active");
+    if (next === "Sticky wall") setLayout("wall");
+  };
+  const moveTask = (task: Task, status: TaskInput["status"]) =>
+    void mutate(async () => {
+      if (task.status === status) return;
+      await updateTask(task, { status });
+      toast.success(`Moved to ${statusNames[status]}`);
+    });
+  const handleWallDrop = (event: React.DragEvent, status: TaskInput["status"]) => {
+    event.preventDefault();
+    const id = event.dataTransfer.getData("text/dayflow-task") || draggedTaskId;
+    setDraggedTaskId(null);
+    const task = tasks.find((item) => item.id === id);
+    if (task) moveTask(task, status);
   };
   const projects = Array.from(
     new Set(["Personal", "Work", "Learning", ...tasks.map((t) => t.project)]),
@@ -523,6 +540,70 @@ export default function Dayflow() {
           <ChevronRight size={16} />
         </button>
       </div>
+    );
+  }
+  function StickyCard({ task }: { task: Task }) {
+    const complete = task.status === "done";
+    const overdue = !!task.due && task.due < today && !complete;
+    return (
+      <article
+        className={`sticky-card ${complete ? "is-complete" : ""}`}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/dayflow-task", task.id);
+          setDraggedTaskId(task.id);
+        }}
+        onDragEnd={() => setDraggedTaskId(null)}
+        aria-label={`Move task ${task.title}`}
+      >
+        <div className="sticky-card-topline">
+          <span className="sticky-grip" aria-hidden="true">⠿</span>
+          <span className={`priority ${task.priority}`}>
+            <Flag size={11} />
+            {task.priority}
+          </span>
+          <button
+            className="icon-button sticky-edit"
+            aria-label={`Edit ${task.title}`}
+            onClick={() => editTask(task)}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <button className="sticky-card-title" onClick={() => editTask(task)}>
+          {task.title}
+        </button>
+        {task.notes && <p className="sticky-card-notes">{task.notes}</p>}
+        <div className="sticky-card-meta">
+          <span className="sticky-project">
+            <span
+              className="project-dot"
+              style={{ background: projectColors[projects.indexOf(task.project) % projectColors.length] }}
+            />
+            {task.project}
+          </span>
+          <span className={`due ${overdue ? "overdue" : ""}`}>
+            <CalendarDays size={12} />
+            {overdue ? "Overdue · " : ""}{dueLabel(task.due)}
+          </span>
+        </div>
+        <div className="sticky-card-actions">
+          <Checkbox
+            className="task-check"
+            aria-label={`${complete ? "Reopen" : "Complete"} ${task.title}`}
+            checked={complete}
+            onCheckedChange={() => toggleTask(task)}
+            disabled={busy}
+          />
+          <Choice
+            value={task.status}
+            label={`Status for ${task.title}`}
+            onChange={(value) => moveTask(task, value as TaskInput["status"])}
+            items={Object.entries(statusNames).map(([value, label]) => ({ value, label }))}
+          />
+        </div>
+      </article>
     );
   }
   return (
@@ -780,6 +861,9 @@ export default function Dayflow() {
                       <TabsTrigger value="board" aria-label="Board view">
                         <Columns3 size={15} />
                       </TabsTrigger>
+                      <TabsTrigger value="wall" aria-label="Sticky wall view">
+                        <StickyNote size={15} />
+                      </TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </div>
@@ -921,6 +1005,46 @@ export default function Dayflow() {
                     {filtered.map((task) => (
                       <TaskCard task={task} key={task.id} />
                     ))}
+                  </div>
+                ) : layout === "wall" ? (
+                  <div className="sticky-wall-shell">
+                    <div className="sticky-wall-intro">
+                      <div>
+                        <strong>Move tasks around your day</strong>
+                        <span>Drag a sticky to another column, or use its status menu.</span>
+                      </div>
+                      <StickyNote size={22} aria-hidden="true" />
+                    </div>
+                    <div className="sticky-wall">
+                      {(["todo", "doing", "done"] as const).map((status) => {
+                        const columnTasks = filtered.filter((task) => task.status === status);
+                        return (
+                          <section
+                            className={`sticky-column sticky-column-${status}`}
+                            key={status}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={(event) => handleWallDrop(event, status)}
+                            aria-label={`${statusNames[status]} tasks`}
+                          >
+                            <div className="sticky-column-heading">
+                              <div>
+                                <span className={`status-dot ${status}`} />
+                                <h3>{statusNames[status]}</h3>
+                              </div>
+                              <small>{columnTasks.length}</small>
+                            </div>
+                            <div className="sticky-column-cards">
+                              {columnTasks.map((task) => (
+                                <StickyCard task={task} key={task.id} />
+                              ))}
+                              {!columnTasks.length && (
+                                <p className="sticky-empty">Drop a task here</p>
+                              )}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div className="board">
