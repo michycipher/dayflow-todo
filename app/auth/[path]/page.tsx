@@ -1,6 +1,6 @@
 import { AuthView } from "@neondatabase/auth-ui";
 import { authViewPaths } from "@neondatabase/auth-ui/server";
-import { ArrowRight, Check, Sparkles } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 
 export const dynamicParams = false;
@@ -33,9 +33,7 @@ export default async function AuthPage({
             <span>dayflow</span>
           </Link>
           <div className="auth-story-copy">
-            <span className="auth-eyebrow">
-              <Sparkles size={14} /> A LITTLE MORE FOCUS
-            </span>
+            <span className="auth-eyebrow">A LITTLE MORE FOCUS</span>
             <h1>{heading}</h1>
             <p>
               Your plans, priorities, and small wins in one peaceful place.

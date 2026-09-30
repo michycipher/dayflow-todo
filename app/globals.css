@@ -98,6 +98,8 @@ a {
   width: 33px;
   height: 35px;
   transform: rotate(-6deg);
+  font-size: 18px;
+  font-weight: 750;
 }
 .workspace-label {
   font-size: 10px;
@@ -376,10 +378,6 @@ h3 {
 }
 .main-shell {
   margin-left: 0;
-}
-.brand-dot {
-  color: #749367;
-  margin-left: -10px;
 }
 .nav-count {
   margin-left: auto;
@@ -1731,14 +1729,14 @@ h3 {
 .auth-shell {
   width: min(100%, 1020px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: clamp(32px, 7vw, 88px);
   animation: auth-shell-in 780ms 80ms both;
 }
 .auth-story {
   min-width: 0;
-  min-height: 510px;
+  min-height: unset;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1819,9 +1817,9 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+  font-size: 29px;
+  font-weight: 750;
+  letter-spacing: -1.2px;
   width: fit-content;
   transition: transform 180ms ease, opacity 180ms ease;
 }
@@ -1831,13 +1829,15 @@ h3 {
 }
 .brand-mark {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 33px;
+  height: 35px;
   place-items: center;
   border-radius: 10px;
   background: var(--primary);
   color: white;
-  font-size: 16px;
+  transform: rotate(-6deg);
+  font-size: 18px;
+  font-weight: 750;
 }
 .auth-card {
   width: 100%;
@@ -1947,6 +1947,19 @@ h3 {
   font-size: 12px;
   text-align: center;
   animation: auth-copy-in 620ms 440ms both;
+}
+
+@media (min-width: 901px) {
+  .auth-shell {
+    grid-template-columns: minmax(0, 1.15fr) minmax(380px, 440px);
+    gap: clamp(44px, 8vw, 110px);
+  }
+  .auth-story {
+    min-height: 510px;
+  }
+  .auth-card {
+    align-self: center;
+  }
 }
 [data-sonner-toaster] [data-sonner-toast] {
   border: 1px solid rgb(221 228 214 / 95%) !important;

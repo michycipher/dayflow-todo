@@ -534,9 +534,9 @@ export default function Dayflow() {
         <SidebarContent className="rail-content">
           <Link className="brand" href="/">
             <span className="brand-mark">
-              <Check size={21} />
+              D
             </span>
-            dayflow<span className="brand-dot">.</span>
+            dayflow
           </Link>
           <div className="workspace-label">PERSONAL WORKSPACE</div>
           <nav aria-label="Workspace views">
