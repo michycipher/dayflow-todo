@@ -27,7 +27,10 @@ import {
   Upload,
   RefreshCw,
   Sparkles,
+  LogOut,
+  UserRound,
 } from "lucide-react";
+import { authClient } from "@/lib/auth/client";
 import {
   Dialog,
   DialogContent,
@@ -113,6 +116,8 @@ async function api(method = "GET", body?: unknown) {
   return result;
 }
 export default function Dayflow() {
+  const { data: authSession, isPending: authPending } = authClient.useSession();
+  const signedInUser = authSession?.user;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -140,20 +145,29 @@ export default function Dayflow() {
   const searchInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
+    if (authPending) return;
     setLoading(true);
     setError("");
     try {
+      if (signedInUser) {
+        const claim = await fetch("/api/tasks/claim", {
+          method: "POST",
+          cache: "no-store",
+        });
+        if (!claim.ok) throw new Error("Your guest tasks could not be saved. Please try again.");
+      }
       setTasks((await api()).tasks);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authPending, signedInUser]);
   useEffect(() => {
+    if (authPending) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [authPending, load]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
     try {
@@ -244,7 +258,7 @@ export default function Dayflow() {
     const tools: Tool[] = [
       {
         name: "list_tasks",
-        description: "Read tasks in this browser’s private workspace.",
+        description: "Read tasks in this private workspace.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -260,7 +274,7 @@ export default function Dayflow() {
       {
         name: "create_task",
         description:
-          "Create and save one task in this browser’s private workspace.",
+          "Create and save one task in this private workspace.",
         inputSchema: {
           type: "object",
           properties: {
@@ -623,10 +637,10 @@ export default function Dayflow() {
               </button>
             </div>
             <div className="profile">
-              <span className="avatar">D</span>
+              <span className="avatar">{signedInUser ? (signedInUser.name || signedInUser.email).slice(0, 1).toUpperCase() : "D"}</span>
               <div>
-                <strong>Your workspace</strong>
-                <small>Private to this browser</small>
+                <strong>{signedInUser?.name || signedInUser?.email || "Guest workspace"}</strong>
+                <small>{signedInUser ? "Synced with your account" : "Private to this browser"}</small>
               </div>
             </div>
           </div>
@@ -649,9 +663,31 @@ export default function Dayflow() {
               })}
             </span>
             <span className="header-divider" />
-            <span className="avatar" title="Private to this browser">
-              D
-            </span>
+            {signedInUser ? (
+              <>
+                <span className="account-name" title={signedInUser.email}>
+                  <UserRound size={14} /> {signedInUser.name || signedInUser.email}
+                </span>
+                <button
+                  className="account-action"
+                  onClick={async () => {
+                    try {
+                      const result = await authClient.signOut();
+                      if (result.error) throw new Error(result.error.message);
+                    } catch (error) {
+                      toast.error((error as Error).message || "Could not sign out.");
+                    }
+                  }}
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link className="account-action" href="/auth/sign-in">Sign in</Link>
+                <Link className="account-action primary-account" href="/auth/sign-up">Create account</Link>
+              </>
+            )}
           </div>
         </header>
         <main className="main">
@@ -912,7 +948,7 @@ export default function Dayflow() {
               <footer className="workspace-footer">
                 <span>
                   <span className="live-dot" />
-                  Saved securely to this browser’s workspace
+                  {signedInUser ? "Saved securely to your account" : "Saved securely to this browser’s workspace"}
                 </span>
                 <span>One thing at a time.</span>
               </footer>

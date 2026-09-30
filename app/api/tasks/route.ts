@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { database } from "@/db";
+import { auth } from "@/lib/auth/server";
 import { tasks as taskTable } from "@/db/schema";
 import { getSession, jsonResponse } from "@/lib/session";
 import { taskInput } from "@/lib/tasks";
@@ -17,8 +18,18 @@ async function handle(
   request: Request,
   action: (userId: string) => Promise<Response>,
 ) {
-  const session = getSession(request);
+  let userId: string;
+  let setCookie: string | undefined;
   try {
+    const { data: authSession, error } = await auth.getSession();
+    if (error) throw error;
+    if (authSession?.user?.id) {
+      userId = authSession.user.id;
+    } else {
+      const guestSession = getSession(request);
+      userId = guestSession.userId;
+      setCookie = guestSession.setCookie;
+    }
     if (
       request.method !== "GET" &&
       !request.headers.get("content-type")?.includes("application/json")
@@ -26,27 +37,26 @@ async function handle(
       return jsonResponse(
         { error: "Expected JSON." },
         415,
-        session.setCookie,
+        setCookie,
       );
 
-    const response = await action(session.userId);
-    if (session.setCookie)
-      response.headers.append("Set-Cookie", session.setCookie);
+    const response = await action(userId);
+    if (setCookie) response.headers.append("Set-Cookie", setCookie);
     return response;
   } catch (error) {
     if (error instanceof z.ZodError)
       return jsonResponse(
         { error: error.issues[0]?.message || "Invalid task." },
         400,
-        session.setCookie,
+        setCookie,
       );
     if (error instanceof SyntaxError)
-      return jsonResponse({ error: "Invalid JSON." }, 400, session.setCookie);
+      return jsonResponse({ error: "Invalid JSON." }, 400, setCookie);
     console.error("Task API failed", error);
     return jsonResponse(
       { error: "Your tasks could not be saved or loaded. Please try again." },
       503,
-      session.setCookie,
+      setCookie,
     );
   }
 }

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@neondatabase/auth-ui/tailwind";
 @import "tw-animate-css";
 @custom-variant dark (&:is(.dark *));
 @theme inline {
@@ -1674,5 +1675,92 @@ h3 {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 22px;
+  padding: 36px 20px;
+  background:
+    radial-gradient(ellipse at 50% 8%, rgb(232 238 223 / 72%), transparent 48%),
+    var(--background);
+}
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white;
+  font-size: 16px;
+}
+.auth-card {
+  width: min(100%, 440px);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 24px 80px rgb(35 50 32 / 9%);
+}
+.auth-note {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 12px;
+}
+.account-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.account-action.primary-account {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+.account-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--muted-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .topbar-right {
+    gap: 6px;
+  }
+  .account-name {
+    display: none;
+  }
+  .account-action {
+    min-height: 32px;
+    padding-inline: 9px;
+    font-size: 11px;
   }
 }

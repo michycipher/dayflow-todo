@@ -21,14 +21,18 @@ function verify(value: string | undefined) {
   return id;
 }
 
-export function getSession(request: Request) {
+export function getExistingSession(request: Request) {
   const cookieHeader = request.headers.get("cookie") ?? "";
   const current = cookieHeader
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${COOKIE_NAME}=`))
     ?.slice(COOKIE_NAME.length + 1);
-  const existing = verify(current);
+  return verify(current);
+}
+
+export function getSession(request: Request) {
+  const existing = getExistingSession(request);
   if (existing) return { userId: existing, setCookie: undefined };
 
   const userId = randomBytes(16).toString("hex").replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5");
@@ -38,6 +42,11 @@ export function getSession(request: Request) {
     userId,
     setCookie: `${COOKIE_NAME}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE}${secure}`,
   };
+}
+
+export function clearGuestCookie(request: Request) {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
 }
 
 export function jsonResponse(
