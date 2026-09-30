@@ -53,7 +53,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Progress } from "@/components/ui/progress";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import {
   taskInput,
@@ -118,6 +117,7 @@ async function api(method = "GET", body?: unknown) {
 export default function Dayflow() {
   const { data: authSession, isPending: authPending } = authClient.useSession();
   const signedInUser = authSession?.user;
+  const signedInUserId = signedInUser?.id;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -149,12 +149,18 @@ export default function Dayflow() {
     setLoading(true);
     setError("");
     try {
-      if (signedInUser) {
+      if (signedInUserId) {
         const claim = await fetch("/api/tasks/claim", {
           method: "POST",
           cache: "no-store",
         });
-        if (!claim.ok) throw new Error("Your guest tasks could not be saved. Please try again.");
+        const claimResult = (await claim.json()) as { claimed?: number; error?: string };
+        if (!claim.ok)
+          throw new Error(claimResult.error || "Your guest tasks could not be saved. Please try again.");
+        if (claimResult.claimed)
+          toast.success(
+            `${claimResult.claimed} guest ${claimResult.claimed === 1 ? "task" : "tasks"} saved to your account.`,
+          );
       }
       setTasks((await api()).tasks);
     } catch (e) {
@@ -162,7 +168,7 @@ export default function Dayflow() {
     } finally {
       setLoading(false);
     }
-  }, [authPending, signedInUser]);
+  }, [authPending, signedInUserId]);
   useEffect(() => {
     if (authPending) return;
     const timer = window.setTimeout(() => void load(), 0);
@@ -674,6 +680,7 @@ export default function Dayflow() {
                     try {
                       const result = await authClient.signOut();
                       if (result.error) throw new Error(result.error.message);
+                      toast.success("You’ve signed out safely.");
                     } catch (error) {
                       toast.error((error as Error).message || "Could not sign out.");
                     }
@@ -1334,11 +1341,6 @@ export default function Dayflow() {
             toast.success(`Imported ${parsed.length} tasks as new copies`);
           });
         }}
-      />
-      <Toaster
-        position="bottom-right"
-        richColors
-        theme={dark ? "dark" : "light"}
       />
     </SidebarProvider>
   );
